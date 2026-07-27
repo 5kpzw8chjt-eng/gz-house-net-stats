@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>广州新房网签数据</title>
+<style>
+:root{--bg:#f5f7fa;--card:#fff;--primary:#1f4e78;--accent:#2e75b6;--text:#333;--muted:#666;--border:#e0e4e8;--up:#d32f2f;--down:#388e3c;--zero:#999;--warn:#fff3cd;--warn-t:#856404;}
+*{box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);margin:0;padding:20px;line-height:1.5}
+header{max-width:1300px;margin:0 auto 20px;background:var(--card);padding:22px 28px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+header h1{margin:0 0 8px;font-size:24px;color:var(--primary)}
+header p{margin:6px 0;color:var(--muted);font-size:14px}
+header a{color:var(--accent);text-decoration:none}
+.controls{max-width:1300px;margin:0 auto 20px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.controls label{font-weight:600;color:var(--muted)}
+.controls select{font-size:16px;padding:8px 12px;border-radius:6px;border:1px solid var(--border);background:#fff}
+.cards{max-width:1300px;margin:0 auto 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+.card{background:var(--card);padding:16px 18px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06);cursor:pointer;transition:transform .15s,border-color .15s;border:2px solid transparent}
+.card:hover{transform:translateY(-2px);border-color:var(--accent)}
+.card.active{border-color:var(--primary)}
+.card-title{font-weight:700;font-size:16px;color:var(--primary);margin-bottom:10px}
+.card-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card-grid .lbl{font-size:12px;color:var(--muted)}
+.card-grid .val{font-size:18px;font-weight:700;color:var(--text)}
+.section{max-width:1300px;margin:0 auto 28px;background:var(--card);border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06);overflow:hidden}
+.section-header{padding:16px 20px;background:linear-gradient(90deg,var(--primary),var(--accent));color:#fff;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.section-header h2{margin:0;font-size:18px}
+.section-header .note{font-size:12px;opacity:.9}
+.section-header .totals{display:flex;gap:18px;font-size:14px}
+.section-header .totals b{font-size:16px;margin-left:4px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:10px 12px;border:1px solid var(--border);text-align:center}
+th{background:#f0f4f8;font-weight:600;color:var(--primary);white-space:nowrap}
+td.name{text-align:left;min-width:180px;word-break:break-word}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.total td{background:#fff3e0;font-weight:700}
+span.na{color:var(--zero);font-size:12px}
+span.up{color:var(--up);font-weight:600}
+span.down{color:var(--down);font-weight:600}
+span.zero{color:var(--zero)}
+span.rate{color:var(--primary);font-weight:600}
+.warn{background:var(--warn);color:var(--warn-t);padding:12px 16px;border-radius:8px;margin:0 auto 20px;max-width:1300px;font-size:14px}
+footer{max-width:1300px;margin:30px auto;color:var(--muted);font-size:13px}
+footer p{margin:6px 0}
+@media(max-width:900px){body{padding:10px} .cards{grid-template-columns:1fr 1fr} .section{overflow-x:auto} table{min-width:760px}}
+@media(max-width:600px){.cards{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>广州新房网签数据</h1>
+  <p>数据来源：<a href="https://zfcj.gz.gov.cn/zfcj/fyxx/fdcxmxx/" target="_blank">广州市住房和城乡建设局 · 阳光家缘 · 房地产项目信息</a>（每日自动抓取，仅引用官方数据）</p>
+  <p>最后更新：<span id="lastUpdate"></span>｜当前选择日期：<span id="curDate" style="font-weight:700;color:var(--primary)"></span></p>
+</header>
+
+<div class="controls">
+  <label for="dateSel">选择日期：</label>
+  <select id="dateSel"></select>
+  <span style="color:var(--muted);font-size:13px">默认显示最新日期；日/周/月环比需至少 2 天数据后自动出现</span>
+</div>
+
+<div class="warn">
+  <b>数据说明：</b>“已网签数”对应阳光家缘“住宅已售套数”；“剩余未网签”对应“住宅未售套数”；“预售总数”=已售+未售。由于官方 API 不返回“栋号”拆分，楼栋名即官方备案记录中的项目名称。
+</div>
+
+<div class="cards" id="cards">
+
+        <div class="card" data-proj="珑曜上城">
+          <div class="card-title">珑曜上城</div>
+          <div class="card-grid">
+            <div><div class="lbl">预售总数</div><div class="val">1,090</div></div>
+            <div><div class="lbl">已网签</div><div class="val">750</div></div>
+            <div><div class="lbl">剩余</div><div class="val">340</div></div>
+            <div><div class="lbl">去化率</div><div class="val">68.81%</div></div>
+          </div>
+        </div>
+        
+
+        <div class="card" data-proj="星汇锦城">
+          <div class="card-title">星汇锦城</div>
+          <div class="card-grid">
+            <div><div class="lbl">预售总数</div><div class="val">1,807</div></div>
+            <div><div class="lbl">已网签</div><div class="val">1,549</div></div>
+            <div><div class="lbl">剩余</div><div class="val">258</div></div>
+            <div><div class="lbl">去化率</div><div class="val">85.72%</div></div>
+          </div>
+        </div>
+        
+
+        <div class="card" data-proj="繁花里">
+          <div class="card-title">繁花里</div>
+          <div class="card-grid">
+            <div><div class="lbl">预售总数</div><div class="val">574</div></div>
+            <div><div class="lbl">已网签</div><div class="val">323</div></div>
+            <div><div class="lbl">剩余</div><div class="val">251</div></div>
+            <div><div class="lbl">去化率</div><div class="val">56.27%</div></div>
+          </div>
+        </div>
+        
+
+        <div class="card" data-proj="檐屿城">
+          <div class="card-title">檐屿城</div>
+          <div class="card-grid">
+            <div><div class="lbl">预售总数</div><div class="val">659</div></div>
+            <div><div class="lbl">已网签</div><div class="val">644</div></div>
+            <div><div class="lbl">剩余</div><div class="val">15</div></div>
+            <div><div class="lbl">去化率</div><div class="val">97.72%</div></div>
+          </div>
+        </div>
+        
+
+        <div class="card" data-proj="亚运城环宇熙和">
+          <div class="card-title">亚运城环宇熙和</div>
+          <div class="card-grid">
+            <div><div class="lbl">预售总数</div><div class="val">924</div></div>
+            <div><div class="lbl">已网签</div><div class="val">128</div></div>
+            <div><div class="lbl">剩余</div><div class="val">796</div></div>
+            <div><div class="lbl">去化率</div><div class="val">13.85%</div></div>
+          </div>
+        </div>
+        
+</div>
+
+<div id="tables"></div>
+
+<footer>
+  <p><b>楼盘名称映射：</b>楼栋名严格采用阳光家缘官方备案名称。珑曜上城→珑曜花园；星汇锦城→明颂花园/盛颂花园；繁花里→繁花院；檐屿城→檐屿花园；亚运城环宇熙和→官方暂无“熙和/环宇熙和”备案记录，暂以最新在售官方组团“亚运城B地块B-6~B-9幢住宅”代理。</p>
+  <p>本系统每日自动从广州市住建局阳光家缘抓取，所有数据均来自官方公开接口，不做任何人工估算。</p>
+</footer>
+
+<script>
+const ARCHIVE = {
+  "dates": [
+    "2026-07-27"
+  ],
+  "meta": {
+    "source": "https://zfcj.gz.gov.cn/zfcj/fyxx/fdcxmxx/",
+    "updated": "2026-07-27T14:58:22.418009",
+    "fetched_date": "2026-07-27"
+  },
+  "projects": [
+    "珑曜上城",
+    "星汇锦城",
+    "繁花里",
+    "檐屿城",
+    "亚运城环宇熙和"
+  ],
+  "records": {
+    "2026-07-27": {
+      "珑曜上城": {
+        "buildings": [
+          {
+            "name": "珑曜花园2栋（番禺区亚运大道BD0210116地块（广州新城一期）项目住宅（自编2#楼））",
+            "presell": "20250081",
+            "developer": "广州市品昱房地产开发有限公司",
+            "address": "番禺区大龙街雄昌大道66号",
+            "total": 155,
+            "signed": 154,
+            "remaining": 1,
+            "rate": 0.993548,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          },
+          {
+            "name": "珑曜花园1栋（番禺区亚运大道BD0210116地块（广州新城一期）项目住宅（自编1#楼））",
+            "presell": "20250082",
+            "developer": "广州市品昱房地产开发有限公司",
+            "address": "番禺区大龙街雄昌大道66号",
+            "total": 155,
+            "signed": 154,
+            "remaining": 1,
+            "rate": 0.993548,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          },
+          {
+            "name": "珑曜花园3号楼（番禺区亚运大道BD0210116地块（广州新城一期）项目住宅（自编3#楼））",
+            "presell": "20250156",
+            "developer": "广州市品昱房地产开发有限公司",
+            "address": "番禺区大龙街雄昌大道66号",
+            "total": 180,
+            "signed": 164,
+            "remaining": 16,
+            "rate": 0.911111,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          },
+          {
+            "name": "珑曜花园9号楼（番禺区亚运大道BD0210116地块（广州新城一期）项目住宅（自编9#楼））",
+            "presell": "20250221",
+            "developer": "广州市品昱房地产开发有限公司",
+            "address": "番禺区大龙街雄昌大道66号",
+            "total": 210,
+            "signed": 125,
+            "remaining": 85,
+            "rate": 0.595238,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          },
+          {
+            "name": "珑曜花园4号楼（番禺区亚运大道BD0210116地块（广州新城一期）项目住宅（自编4#楼））",
+            "presell": "20250337",
+            "developer": "广州市品昱房地产开发有限公司",
+            "address": "番禺区大龙街雄昌大道66号",
+            "total": 180,
+            "signed": 125,
+            "remaining": 55,
+            "rate": 0.694444,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          },
+          {
+            "name": "珑曜花园8号楼（番禺区亚运大道BD0210116地块（广州新城一期）项目住宅（自编8#楼））",
+            "presell": "20260083",
+            "developer": "广州市品昱房地产开发有限公司",
+            "address": "番禺区大龙街雄昌大道66号",
+            "total": 210,
+            "signed": 28,
+            "remaining": 182,
+            "rate": 0.133333,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          }
+        ],
+        "summary": {
+          "total": 1090,
+          "signed": 750,
+          "remaining": 340,
+          "rate": 0.688073,
+          "count": 6,
+          "day_delta": null,
+          "day_pct": null,
+          "week_delta": null,
+          "week_pct": null,
+          "month_delta": null,
+          "month_pct": null
+        }
+      },
+      "星汇锦城": {
+        "buildings": [
+          {
+            "name": "明颂花园（自编3号）",
+            "presell": "20230310",
+            "developer": "广州越创房地产开发有限公司",
+            "address": "番禺区南村镇颂勤二街1号",
+            "total": 224,
+            "signed": 219,
+            "remaining": 5,
+            "rate": 0.977679,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          },
+          {
+            "name": "明颂花园（自编号1、2栋）",
+            "presell": "20230311",
+            "developer": "广州越创房地产开发有限公司",
+            "address": "番禺区南村镇颂勤二街1号",
+            "total": 382,
+            "signed": 368,
+            "remaining": 14,
+            "rate": 0.963351,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          },
+          {
+            "name": "明颂花园(自编号4栋)",
+            "presell": "20230399",
+            "developer": "广州越创房地产开发有限公司",
+            "address": "番禺区南村镇颂勤二街1号",
+            "total": 246,
+            "signed": 245,
+            "remaining": 1,
+            "rate": 0.995935,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          },
+          {
+            "name": "盛颂花园（自编号7、8栋）",
+            "presell": "20240262",
+            "developer": "广州越创房地产开发有限公司",
+            "address": "番禺区南村镇颂勤二街1号（自编号7、8栋）",
+            "total": 320,
+            "signed": 276,
+            "remaining": 44,
+            "rate": 0.8625,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          },
+          {
+            "name": "盛颂花园（自编号16栋）",
+            "presell": "20240373",
+            "developer": "广州越创房地产开发有限公司",
+            "address": "番禺区南村镇",
+            "total": 160,
+            "signed": 151,
+            "remaining": 9,
+            "rate": 0.94375,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          },
+          {
+            "name": "盛颂花园（自编号15栋）",
+            "presell": "20250041",
+            "developer": "广州越创房地产开发有限公司",
+            "address": "番禺区南村镇颂勤二街1号15栋",
+            "total": 160,
+            "signed": 146,
+            "remaining": 14,
+            "rate": 0.9125,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          },
+          {
+            "name": "盛颂花园（自编号14栋）",
+            "presell": "20250317",
+            "developer": "广州越创房地产开发有限公司",
+            "address": "番禺区南村镇颂勤二街1号14栋",
+            "total": 160,
+            "signed": 102,
+            "remaining": 58,
+            "rate": 0.6375,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          },
+          {
+            "name": "盛颂花园（自编号9栋）",
+            "presell": "20260147",
+            "developer": "广州越创房地产开发有限公司",
+            "address": "番禺区南村镇颂勤二街1号9栋",
+            "total": 155,
+            "signed": 42,
+            "remaining": 113,
+            "rate": 0.270968,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          }
+        ],
+        "summary": {
+          "total": 1807,
+          "signed": 1549,
+          "remaining": 258,
+          "rate": 0.857222,
+          "count": 8,
+          "day_delta": null,
+          "day_pct": null,
+          "week_delta": null,
+          "week_pct": null,
+          "month_delta": null,
+          "month_pct": null
+        }
+      },
+      "繁花里": {
+        "buildings": [
+          {
+            "name": "繁花院1栋",
+            "presell": "20250234",
+            "developer": "广州信豪房地产有限公司",
+            "address": "番禺区市桥街西丽社区西丽路90号1栋",
+            "total": 152,
+            "signed": 139,
+            "remaining": 13,
+            "rate": 0.914474,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          },
+          {
+            "name": "繁花院2栋",
+            "presell": "20250323",
+            "developer": "广州信豪房地产有限公司",
+            "address": "番禺区市桥街西丽社区西丽路90号2栋",
+            "total": 148,
+            "signed": 138,
+            "remaining": 10,
+            "rate": 0.932432,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          },
+          {
+            "name": "繁花院5栋",
+            "presell": "20260113",
+            "developer": "广州信豪房地产有限公司",
+            "address": "番禺区市桥街西丽社区西丽路90号5栋",
+            "total": 124,
+            "signed": 15,
+            "remaining": 109,
+            "rate": 0.120968,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          },
+          {
+            "name": "繁花院3栋",
+            "presell": "20260174",
+            "developer": "广州信豪房地产有限公司",
+            "address": "番禺区市桥街西丽社区西丽路90号3栋",
+            "total": 150,
+            "signed": 31,
+            "remaining": 119,
+            "rate": 0.206667,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          }
+        ],
+        "summary": {
+          "total": 574,
+          "signed": 323,
+          "remaining": 251,
+          "rate": 0.562718,
+          "count": 4,
+          "day_delta": null,
+          "day_pct": null,
+          "week_delta": null,
+          "week_pct": null,
+          "month_delta": null,
+          "month_pct": null
+        }
+      },
+      "檐屿城": {
+        "buildings": [
+          {
+            "name": "檐屿花园（自编号A1#住宅）",
+            "presell": "20250200",
+            "developer": "广州万瑜房地产有限公司",
+            "address": "番禺区石壁街石兴大道南460号A1栋",
+            "total": 158,
+            "signed": 155,
+            "remaining": 3,
+            "rate": 0.981013,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          },
+          {
+            "name": "檐屿花园（自编号A9#住宅）",
+            "presell": "20250201",
+            "developer": "广州万瑜房地产有限公司",
+            "address": "番禺区石壁街石兴大道南460号A9栋",
+            "total": 155,
+            "signed": 149,
+            "remaining": 6,
+            "rate": 0.96129,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          },
+          {
+            "name": "檐屿花园（自编号A2#住宅）",
+            "presell": "20250236",
+            "developer": "广州万瑜房地产有限公司",
+            "address": "番禺区石壁街石兴大道南石兴大道南460号A2栋",
+            "total": 191,
+            "signed": 188,
+            "remaining": 3,
+            "rate": 0.984293,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          },
+          {
+            "name": "檐屿花园（自编号A8#住宅）",
+            "presell": "20250294",
+            "developer": "广州万瑜房地产有限公司",
+            "address": "番禺区石壁街石兴大道南460号A8栋",
+            "total": 155,
+            "signed": 152,
+            "remaining": 3,
+            "rate": 0.980645,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          }
+        ],
+        "summary": {
+          "total": 659,
+          "signed": 644,
+          "remaining": 15,
+          "rate": 0.977238,
+          "count": 4,
+          "day_delta": null,
+          "day_pct": null,
+          "week_delta": null,
+          "week_pct": null,
+          "month_delta": null,
+          "month_pct": null
+        }
+      },
+      "亚运城环宇熙和": {
+        "buildings": [
+          {
+            "name": "亚运城B地块B-6~B-9幢住宅",
+            "presell": "20260088",
+            "developer": "广州利合房地产开发有限公司",
+            "address": "番禺区石碁镇",
+            "total": 924,
+            "signed": 128,
+            "remaining": 796,
+            "rate": 0.138528,
+            "day_delta": null,
+            "day_pct": null,
+            "week_delta": null,
+            "week_pct": null,
+            "month_delta": null,
+            "month_pct": null
+          }
+        ],
+        "summary": {
+          "total": 924,
+          "signed": 128,
+          "remaining": 796,
+          "rate": 0.138528,
+          "count": 1,
+          "day_delta": null,
+          "day_pct": null,
+          "week_delta": null,
+          "week_pct": null,
+          "month_delta": null,
+          "month_pct": null
+        }
+      }
+    }
+  }
+};
+const dateSel = document.getElementById('dateSel');
+const curDateSpan = document.getElementById('curDate');
+const lastUpdate = document.getElementById('lastUpdate');
+const tables = document.getElementById('tables');
+const cards = document.getElementById('cards');
+
+lastUpdate.textContent = (ARCHIVE.meta.updated || '').replace('T',' ').substring(0,19);
+ARCHIVE.dates.slice().reverse().forEach(d => { const opt = document.createElement('option'); opt.value = d; opt.textContent = d; dateSel.appendChild(opt); });
+
+function fmtNum(n){ if(n===null||n===undefined||n==='') return '<span class="na">—</span>'; return n.toLocaleString(); }
+function fmtDelta(n){ if(n===null||n===undefined||n==='') return '<span class="na">—</span>'; const sign = n>0?'+':''; return `<span class="num">${sign}${n.toLocaleString()}</span>`; }
+function fmtPct(v){ if(v===null||v===undefined||v==='') return '<span class="na">—</span>'; const cls = v>0?'up':(v<0?'down':'zero'); return `<span class="${cls}">${(v*100).toFixed(2)}%</span>`; }
+function fmtRate(v){ if(v===null||v===undefined||v==='') return '<span class="na">—</span>'; return `<span class="rate">${(v*100).toFixed(2)}%</span>`; }
+function fmtDeltaPct(v){ if(v===null||v===undefined||v==='') return '<span class="na">—</span>'; const cls = v>0?'up':(v<0?'down':'zero'); const sign = v>0?'+':''; return `<span class="${cls}">${sign}${(v*100).toFixed(2)}%</span>`; }
+
+function render(){
+  const date = dateSel.value;
+  curDateSpan.textContent = date;
+  const rec = ARCHIVE.records[date] || {};
+  tables.innerHTML = '';
+  Array.from(cards.children).forEach((c,i) => { c.classList.toggle('active', false); });
+  ARCHIVE.projects.forEach((proj, idx) => {
+    const p = rec[proj] || {buildings:[], summary:{total:0,signed:0,remaining:0,rate:0,count:0}};
+    const s = p.summary;
+    const note = {"珑曜上城": "官方备案名：珑曜花园", "星汇锦城": "官方备案名：明颂花园 + 盛颂花园（越秀·大学·星汇锦城）", "繁花里": "官方备案名：繁花院", "檐屿城": "官方备案名：檐屿花园", "亚运城环宇熙和": "阳光家缘未以“熙和/环宇熙和”备案；本表以最新在售官方组团“亚运城B地块B-6~B-9幢住宅（预售证20260088）”代理"};
+    let rows = p.buildings.map((b, i) => `
+      <tr>
+        <td class="name">${b.name}</td>
+        <td>${b.presell}</td>
+        <td class="num">${fmtNum(b.total)}</td>
+        <td class="num">${fmtNum(b.signed)}</td>
+        <td class="num">${fmtNum(b.remaining)}</td>
+        <td>${fmtRate(b.rate)}</td>
+        <td class="num">${fmtDelta(b.day_delta)}</td>
+        <td>${fmtDeltaPct(b.day_pct)}</td>
+        <td class="num">${fmtDelta(b.week_delta)}</td>
+        <td>${fmtDeltaPct(b.week_pct)}</td>
+        <td class="num">${fmtDelta(b.month_delta)}</td>
+        <td>${fmtDeltaPct(b.month_pct)}</td>
+      </tr>
+    `).join('');
+    rows += `
+      <tr class="total">
+        <td class="name">合计（${s.count} 条官方记录）</td>
+        <td>—</td>
+        <td class="num">${fmtNum(s.total)}</td>
+        <td class="num">${fmtNum(s.signed)}</td>
+        <td class="num">${fmtNum(s.remaining)}</td>
+        <td>${fmtRate(s.rate)}</td>
+        <td class="num">${fmtDelta(s.day_delta)}</td>
+        <td>${fmtDeltaPct(s.day_pct)}</td>
+        <td class="num">${fmtDelta(s.week_delta)}</td>
+        <td>${fmtDeltaPct(s.week_pct)}</td>
+        <td class="num">${fmtDelta(s.month_delta)}</td>
+        <td>${fmtDeltaPct(s.month_pct)}</td>
+      </tr>
+    `;
+    const sec = document.createElement('div');
+    sec.className = 'section';
+    sec.innerHTML = `
+      <div class="section-header">
+        <h2>${proj}</h2>
+        <div class="note">${note[proj]||''}</div>
+        <div class="totals">
+          <span>预售总数<b>${fmtNum(s.total)}</b></span>
+          <span>已网签<b>${fmtNum(s.signed)}</b></span>
+          <span>剩余<b>${fmtNum(s.remaining)}</b></span>
+          <span>去化率<b>${fmtRate(s.rate)}</b></span>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>楼栋（官方备案名）</th><th>预售证号</th><th>预售总数</th><th>已网签数</th><th>剩余未网签</th><th>去化率</th>
+            <th>日新增</th><th>日环比</th><th>周新增</th><th>周环比</th><th>月新增</th><th>月环比</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+    tables.appendChild(sec);
+  });
+}
+
+dateSel.addEventListener('change', render);
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+# 抓取/构建中间产物与测试脚本不入库
+captcha.png
+result.png
+site_preview.png
+yjy_raw.html
+result.html
+search_*.html
+explore.py
+fetch_one.py
+search_test.py
+save_search.py
+capture_network.py
+screenshot.py
+build_stats.py
+*.pyc
+__pycache__/
+.DS_Store
+
+# 前序任务的非仓库产物
+wc.js
+*.xlsx
+广州市在售新房网签数据统计.*
+
+# 前序任务的非仓库产物
+wc.js
+*.xlsx
+广州市在售新房网签数据统计.*
