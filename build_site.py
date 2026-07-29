@@ -42,21 +42,58 @@ def _prev_date(date, dates):
     return dates[idx-1] if idx > 0 else None
 
 def _week_start(date, dates):
+    """返回上周同日（same weekday, previous week）的存档日期。
+    若恰好不存在，回退到上周最接近的日期。
+    若无上周数据则返回 None。"""
     d = datetime.strptime(date, "%Y-%m-%d")
-    mon = d - timedelta(days=d.weekday())
-    same = [dd for dd in dates if mon <= datetime.strptime(dd, "%Y-%m-%d") <= mon + timedelta(days=6)]
-    if same:
-        return same[0]
-    before = [dd for dd in dates if datetime.strptime(dd, "%Y-%m-%d") < mon]
+    target = d - timedelta(days=7)  # 上周同日
+    # 优先精确匹配上周同日
+    exact = [dd for dd in dates if dd == target.strftime("%Y-%m-%d")]
+    if exact:
+        return exact[0]
+    # 回退：上周（周一到周日）区间内最接近的日期
+    week_mon = target - timedelta(days=target.weekday())
+    week_sun = week_mon + timedelta(days=6)
+    candidates = [dd for dd in dates if week_mon <= datetime.strptime(dd, "%Y-%m-%d") <= week_sun]
+    if candidates:
+        return candidates[-1]  # 取最近的
+    # 更早的数据
+    before = [dd for dd in dates if datetime.strptime(dd, "%Y-%m-%d") < week_mon]
     return before[-1] if before else None
 
 def _month_start(date, dates):
+    """返回上月同日的存档日期。
+    若上月同日不存在（如 3/31 对应 2/31 不存在），回退到上月最后一天。
+    若无上月数据则返回 None。"""
     d = datetime.strptime(date, "%Y-%m-%d")
-    month_start = d.replace(day=1)
-    same = [dd for dd in dates if datetime.strptime(dd, "%Y-%m-%d") >= month_start and datetime.strptime(dd, "%Y-%m-%d").month == d.month and datetime.strptime(dd, "%Y-%m-%d").year == d.year]
-    if same:
-        return same[0]
-    before = [dd for dd in dates if datetime.strptime(dd, "%Y-%m-%d") < month_start]
+    # 计算上月同日
+    if d.month == 1:
+        target_month, target_year = 12, d.year - 1
+    else:
+        target_month, target_year = d.month - 1, d.year
+    # 处理月末溢出（如 3/31 → 2/28）
+    target_day = min(d.day, 28)
+    while True:
+        try:
+            target = datetime(target_year, target_month, target_day)
+            break
+        except ValueError:
+            target_day -= 1
+    # 精确匹配
+    exact = [dd for dd in dates if dd == target.strftime("%Y-%m-%d")]
+    if exact:
+        return exact[0]
+    # 回退：上月范围内最接近的日期
+    month_start_d = target.replace(day=1)
+    if target.month == 12:
+        month_end_d = target.replace(year=target.year+1, month=1, day=1) - timedelta(days=1)
+    else:
+        month_end_d = target.replace(month=target.month+1, day=1) - timedelta(days=1)
+    candidates = [dd for dd in dates if month_start_d <= datetime.strptime(dd, "%Y-%m-%d") <= month_end_d]
+    if candidates:
+        return candidates[-1]
+    # 更早的数据
+    before = [dd for dd in dates if datetime.strptime(dd, "%Y-%m-%d") < month_start_d]
     return before[-1] if before else None
 
 def _attach_compare(item, date, prev, wstart, mstart, records, proj, is_summary=False):
@@ -283,7 +320,7 @@ function render(){{
         <thead>
           <tr>
             <th>楼栋（官方备案名）</th><th>预售证号</th><th>预售总数</th><th>已网签数</th><th>剩余未网签</th><th>去化率</th>
-            <th>日新增</th><th>日环比</th><th>周新增</th><th>周环比</th><th>月新增</th><th>月环比</th>
+            <th>日新增</th><th>日环比</th><th>周新增(vs上周同日)</th><th>周环比</th><th>月新增(vs上月同日)</th><th>月环比</th>
           </tr>
         </thead>
         <tbody>${{rows}}</tbody>
