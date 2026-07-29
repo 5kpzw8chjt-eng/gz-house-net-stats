@@ -38,6 +38,12 @@ HEADERS_DETAIL = {
     "Accept": "application/json, text/javascript, */*",
 }
 
+HEADERS_DETAIL = {
+    "User-Agent": HEADERS["User-Agent"],
+    "Referer": "https://zfcj.gz.gov.cn/zfcj/fyxx/projectdetail/index.html",
+    "Accept": "application/json, text/javascript, */*",
+}
+
 
 def _get(url, headers=None, retries=3):
     headers = headers or HEADERS
@@ -105,6 +111,18 @@ def clean_building_name(name):
 
 def _extract_floor(build_name):
     """从 buildName 提取简洁栋号，如 '7栋'、'8栋'。"""
+    m = re.search(r'(\d+)栋', build_name)
+    if m:
+        return f"{m.group(1)}栋"
+    m = re.search(r'(自编[号]?)([\dA-Za-z-]+)', build_name)
+    if m:
+        return f"自编号{m.group(2)}"
+    return build_name
+
+
+def _extract_floor(build_name):
+    """从 buildName 提取简洁栋号，如 '7栋'、'8栋'。"""
+    import re
     m = re.search(r'(\d+)栋', build_name)
     if m:
         return f"{m.group(1)}栋"
