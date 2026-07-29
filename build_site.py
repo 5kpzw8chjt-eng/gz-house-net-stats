@@ -24,8 +24,8 @@ def compute_comparisons(archive):
             snap = records[date].get(proj, {"buildings": [], "summary": {}})
             # reference dates
             prev = _prev_date(date, dates)
-            wstart = _week_start(date, dates)
-            mstart = _month_start(date, dates)
+            wstart = _week_monday(date, dates)
+            mstart = _month_first(date, dates)
             # building level
             bld_out = []
             for b in snap.get("buildings", []):
@@ -41,84 +41,81 @@ def _prev_date(date, dates):
     idx = dates.index(date)
     return dates[idx-1] if idx > 0 else None
 
-def _week_start(date, dates):
-    """返回上周同日（same weekday, previous week）的存档日期。
-    若恰好不存在，回退到上周最接近的日期。
-    若无上周数据则返回 None。"""
+def _week_monday(date, dates):
+    """返回本周一（自然周起点）在存档中的日期。
+    若本周一没有数据，回退到本周第一个有数据的日期。
+    若本周之前没有数据，返回 None（此时周新增=日新增，因为第一天没有周基准）。"""
     d = datetime.strptime(date, "%Y-%m-%d")
-    target = d - timedelta(days=7)  # 上周同日
-    # 优先精确匹配上周同日
-    exact = [dd for dd in dates if dd == target.strftime("%Y-%m-%d")]
-    if exact:
-        return exact[0]
-    # 回退：上周（周一到周日）区间内最接近的日期
-    week_mon = target - timedelta(days=target.weekday())
-    week_sun = week_mon + timedelta(days=6)
-    candidates = [dd for dd in dates if week_mon <= datetime.strptime(dd, "%Y-%m-%d") <= week_sun]
+    mon = d - timedelta(days=d.weekday())  # 本周一
+    mon_str = mon.strftime("%Y-%m-%d")
+    # 本周一及之后的所有存档日期
+    candidates = [dd for dd in dates if mon_str <= dd <= date]
     if candidates:
-        return candidates[-1]  # 取最近的
-    # 更早的数据
-    before = [dd for dd in dates if datetime.strptime(dd, "%Y-%m-%d") < week_mon]
-    return before[-1] if before else None
+        return candidates[0]  # 本周最早有数据的日期（通常就是周一或最近的一天）
+    # 本周无数据（理论上不会发生，但做保护）
+    return None
 
-def _month_start(date, dates):
-    """返回上月同日的存档日期。
-    若上月同日不存在（如 3/31 对应 2/31 不存在），回退到上月最后一天。
-    若无上月数据则返回 None。"""
+def _month_first(date, dates):
+    """返回本月1日（自然月起点）在存档中的日期。
+    若本月1日没有数据，回退到本月第一个有数据的日期。
+    若本月之前没有数据，返回 None。"""
     d = datetime.strptime(date, "%Y-%m-%d")
-    # 计算上月同日
-    if d.month == 1:
-        target_month, target_year = 12, d.year - 1
-    else:
-        target_month, target_year = d.month - 1, d.year
-    # 处理月末溢出（如 3/31 → 2/28）
-    target_day = min(d.day, 28)
-    while True:
-        try:
-            target = datetime(target_year, target_month, target_day)
-            break
-        except ValueError:
-            target_day -= 1
-    # 精确匹配
-    exact = [dd for dd in dates if dd == target.strftime("%Y-%m-%d")]
-    if exact:
-        return exact[0]
-    # 回退：上月范围内最接近的日期
-    month_start_d = target.replace(day=1)
-    if target.month == 12:
-        month_end_d = target.replace(year=target.year+1, month=1, day=1) - timedelta(days=1)
-    else:
-        month_end_d = target.replace(month=target.month+1, day=1) - timedelta(days=1)
-    candidates = [dd for dd in dates if month_start_d <= datetime.strptime(dd, "%Y-%m-%d") <= month_end_d]
+    first = d.replace(day=1)
+    first_str = first.strftime("%Y-%m-%d")
+    # 本月1日及之后的所有存档日期
+    candidates = [dd for dd in dates if first_str <= dd <= date]
     if candidates:
-        return candidates[-1]
-    # 更早的数据
-    before = [dd for dd in dates if datetime.strptime(dd, "%Y-%m-%d") < month_start_d]
-    return before[-1] if before else None
+        return candidates[0]  # 本月最早有数据的日期
+    return None
 
 def _attach_compare(item, date, prev, wstart, mstart, records, proj, is_summary=False):
+    """日新增=当天-prev，周新增=当天-本周起点，月新增=当天-本月起点。
+    对于第一天（无prev/wstart/mstart），日新增=当天signed（初始值），周新增=日新增，月新增=日新增。"""
     out = dict(item)
     curr = item.get("signed", 0) or 0
-    for label, ref_date in [("day", prev), ("week", wstart), ("month", mstart)]:
-        if ref_date and ref_date != date and ref_date in records and proj in records[ref_date]:
-            ref_rec = records[ref_date][proj]
-            if is_summary:
-                ref = ref_rec.get("summary", {})
-            else:
-                ref = next((x for x in ref_rec.get("buildings", []) if x.get("name") == item.get("name")), None)
-            if ref is None:
-                out[f"{label}_delta"] = None
-                out[f"{label}_pct"] = None
-                continue
-            ref_val = ref.get("signed", 0) or 0
-            delta = curr - ref_val
-            pct = (delta / ref_val) if ref_val > 0 else None
-            out[f"{label}_delta"] = delta
-            out[f"{label}_pct"] = round(pct, 6) if pct is not None else None
-        else:
-            out[f"{label}_delta"] = None
-            out[f"{label}_pct"] = None
+
+    # 日新增：当天 vs 前一天
+    if prev and prev != date and prev in records and proj in records[prev]:
+        ref_val = _get_ref_signed(prev, records, proj, item, is_summary)
+        out["day_delta"] = curr - ref_val if ref_val is not None else None
+        out["day_pct"] = round((curr - ref_val) / ref_val, 6) if ref_val and ref_val > 0 else None
+    else:
+        # 第一天（无前一天数据）：日新增无意义，显示 —
+        out["day_delta"] = None
+        out["day_pct"] = None
+
+    # 周新增：当天 vs 本周起点（周一到今天累计）
+    if wstart and wstart != date and wstart in records and proj in records[wstart]:
+        ref_val = _get_ref_signed(wstart, records, proj, item, is_summary)
+        out["week_delta"] = curr - ref_val if ref_val is not None else None
+        out["week_pct"] = round((curr - ref_val) / ref_val, 6) if ref_val and ref_val > 0 else None
+    else:
+        # 本周第一天或无上周数据：周新增也无意义
+        out["week_delta"] = None
+        out["week_pct"] = None
+
+    # 月新增：当天 vs 本月起点（1日到今天累计）
+    if mstart and mstart != date and mstart in records and proj in records[mstart]:
+        ref_val = _get_ref_signed(mstart, records, proj, item, is_summary)
+        out["month_delta"] = curr - ref_val if ref_val is not None else None
+        out["month_pct"] = round((curr - ref_val) / ref_val, 6) if ref_val and ref_val > 0 else None
+    else:
+        # 本月第一天或无上月数据：月新增也无意义
+        out["month_delta"] = None
+        out["month_pct"] = None
+
     return out
+
+def _get_ref_signed(ref_date, records, proj, item, is_summary):
+    """从参考日期获取对应楼盘/楼栋的 signed 值。"""
+    ref_rec = records[ref_date][proj]
+    if is_summary:
+        ref = ref_rec.get("summary", {})
+    else:
+        ref = next((x for x in ref_rec.get("buildings", []) if x.get("name") == item.get("name")), None)
+    if ref is None:
+        return None
+    return ref.get("signed", 0) or 0
 
 def pct_html(v):
     if v is None:
@@ -320,7 +317,7 @@ function render(){{
         <thead>
           <tr>
             <th>楼栋（官方备案名）</th><th>预售证号</th><th>预售总数</th><th>已网签数</th><th>剩余未网签</th><th>去化率</th>
-            <th>日新增</th><th>日环比</th><th>周新增(vs上周同日)</th><th>周环比</th><th>月新增(vs上月同日)</th><th>月环比</th>
+            <th>日新增</th><th>日环比</th><th>本周累计新增</th><th>周环比</th><th>本月累计新增</th><th>月环比</th>
           </tr>
         </thead>
         <tbody>${{rows}}</tbody>
