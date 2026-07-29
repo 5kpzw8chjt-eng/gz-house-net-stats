@@ -1,8 +1,8 @@
 #!/usr/bin/env python3.11
 # -*- coding: utf-8 -*-
-"""Ã¿ÈÕ´ÓÑô¹â¼ÒÔµ¹Ù·½ API ×¥È¡Ö¸¶¨Â¥ÅÌµÄÍøÇ©Êý¾Ý£¬²¢Ð´Èë archive.json¡£
-Êý¾ÝÀ´Ô´£ºhttps://zfcj.gz.gov.cn/zfcj/fyxx/fdcxmxx/
-Êµ¼Ê½Ó¿Ú£¨Ò³Ãæ²¶»ñ£©£º/ysqgk/Api/WebApi/fdcxmxxlb.ashx
+"""Daily scraper for Guangzhou new house online-signing data from official API.
+Data source: https://zfcj.gz.gov.cn/zfcj/fyxx/fdcxmxx/
+API endpoint: /ysqgk/Api/WebApi/fdcxmxxlb.ashx
 """
 import json, os, time, sys, re
 from datetime import datetime, timedelta
@@ -12,23 +12,13 @@ import requests
 BASE_URL = "https://zfcj.gz.gov.cn/ysqgk/Api/WebApi/fdcxmxxlb.ashx"
 ARCHIVE = "archive.json"
 
-# ÅäÖÃ£ºÓÃ»§Ãû³Æ -> ¹Ù·½¹Ø¼ü´Ê/¹ýÂËÌõ¼þ
 PROJECTS = {
-    "ççê×ÉÏ³Ç": {
-        "keywords": ["ççê×»¨Ô°"],
-    },
-    "ÐÇ»ã½õ³Ç": {
-        "keywords": ["Ã÷ËÌ»¨Ô°", "Ê¢ËÌ»¨Ô°"],
-    },
-    "·±»¨Àï": {
-        "keywords": ["·±»¨Ôº"],
-    },
-    "éÜÓì³Ç": {
-        "keywords": ["éÜÓì»¨Ô°"],
-    },
-    "ÑÇÔË³Ç»·ÓîÎõºÍ": {
-        # ¹Ù·½ API ÖÐÎ´ÕÒµ½¡°ÎõºÍ/»·ÓîÎõºÍ¡±±¸°¸Ãû£»ÒÔ×îÐÂÔÚÊÛµÄÑÇÔË³ÇBµØ¿é´úÀí
-        "keywords": ["ÑÇÔË³Ç"],
+    "ç‘æ›œä¸ŠåŸŽ": {"keywords": ["ç‘æ›œèŠ±å›­"]},
+    "æ˜Ÿæ±‡é”¦åŸŽ": {"keywords": ["æ˜Žé¢‚èŠ±å›­", "ç››é¢‚èŠ±å›­"]},
+    "ç¹èŠ±é‡Œ": {"keywords": ["ç¹èŠ±é™¢"]},
+    "æªå±¿åŸŽ": {"keywords": ["æªå±¿èŠ±å›­"]},
+    "äºšè¿åŸŽçŽ¯å®‡ç†™å’Œ": {
+        "keywords": ["äºšè¿åŸŽ"],
         "filter": lambda r: r.get("presell") == "20260088" and "B-6~B-9" in r.get("projectName", "")
     }
 }
@@ -54,7 +44,6 @@ def fetch_page(project_name, page=1, page_size=50):
     return r.json()
 
 def fetch_all(keyword):
-    """×¥È¡¹Ø¼ü´ÊÏÂËùÓÐÒ³£¬·µ»ØÔ­Ê¼¼ÇÂ¼ÁÐ±í¡£"""
     records = []
     page = 1
     total_page = 1
@@ -67,7 +56,6 @@ def fetch_all(keyword):
     return records
 
 def clean_building_name(name):
-    """ÇåÀí¹Ù·½Ãû³Æ£¬±£Áô¹Ø¼üÐÅÏ¢¡£"""
     return re.sub(r"\s+", " ", name).strip()
 
 def build_project_snapshot(alias, cfg):
@@ -77,7 +65,6 @@ def build_project_snapshot(alias, cfg):
     f = cfg.get("filter")
     if f:
         records = [r for r in records if f(r)]
-    # È¥ÖØ£º°´ projectId
     seen = set()
     uniq = []
     for r in records:
@@ -86,7 +73,6 @@ def build_project_snapshot(alias, cfg):
             continue
         seen.add(pid)
         uniq.append(r)
-    # ÅÅÐò£º°´Ô¤ÊÛÖ¤ºÅ
     uniq.sort(key=lambda x: x.get("presell", "") or "")
 
     buildings = []
@@ -114,14 +100,11 @@ def build_project_snapshot(alias, cfg):
         "rate": round(signed_all / total_all, 6) if total_all > 0 else 0,
         "count": len(buildings),
     }
-    return {
-        "buildings": buildings,
-        "summary": summary,
-    }
+    return {"buildings": buildings, "summary": summary}
 
 def run(target_date=None):
     if target_date is None:
-        # °´±±¾©Ê±¼ä£¨UTC+8£©È¡µ±Ç°ÈÕÆÚ£¬Æ¥ÅäÃ¿Ìì 09:00 ¶¨Ê±ÔËÐÐ
+        # Beijing time (UTC+8) date, matching the 09:00 CST schedule
         target_date = (datetime.utcnow() + timedelta(hours=8)).strftime("%Y-%m-%d")
 
     out = {}
@@ -133,7 +116,6 @@ def run(target_date=None):
             print(f"[scraper] ERROR {alias}: {e}")
             out[alias] = {"buildings": [], "summary": {"total":0,"signed":0,"remaining":0,"rate":0,"count":0}, "error": str(e)}
 
-    # ¶ÁÈ¡¾É¹éµµ
     archive = {"meta": {}, "records": {}}
     if os.path.exists(ARCHIVE):
         with open(ARCHIVE, "r", encoding="utf-8") as f:
@@ -143,7 +125,6 @@ def run(target_date=None):
     archive["meta"]["fetched_date"] = target_date
     archive["records"][target_date] = out
 
-    # °´ÈÕÆÚÅÅÐò£¬±£³Ö records ×Öµä
     with open(ARCHIVE, "w", encoding="utf-8") as f:
         json.dump(archive, f, ensure_ascii=False, indent=2)
     print(f"[scraper] archived {target_date} -> {ARCHIVE}")
