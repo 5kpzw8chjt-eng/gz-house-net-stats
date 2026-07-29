@@ -10,7 +10,7 @@ from urllib.parse import urlencode
 import requests
 
 BASE_URL = "https://zfcj.gz.gov.cn/ysqgk/Api/WebApi/fdcxmxxlb.ashx"
-ARCHIVE = "/workspace/archive.json"
+ARCHIVE = "archive.json"
 
 # 配置：用户名称 -> 官方关键词/过滤条件
 PROJECTS = {

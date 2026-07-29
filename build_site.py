@@ -5,8 +5,8 @@ import json, os
 from datetime import datetime, timedelta
 from urllib.parse import quote
 
-ARCHIVE = "/workspace/archive.json"
-OUT = "/workspace/广州新房网签数据.html"
+ARCHIVE = "archive.json"
+OUT = "广州新房网签数据.html"
 
 def load_archive():
     with open(ARCHIVE, "r", encoding="utf-8") as f:
