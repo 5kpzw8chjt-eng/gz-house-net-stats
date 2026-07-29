@@ -1,8 +1,8 @@
 #!/usr/bin/env python3.11
 # -*- coding: utf-8 -*-
-"""每日从阳光家缘官�? API 抓取指定楼盘的网签数据，并写�? archive.json�?
-数据来源：https://zfcj.gz.gov.cn/zfcj/fyxx/fdcxmxx/
-实际接口（页面捕获）�?/ysqgk/Api/WebApi/fdcxmxxlb.ashx
+"""ÿ�մ������Ե�ٷ� API ץȡָ��¥�̵���ǩ���ݣ���д�� archive.json��
+������Դ��https://zfcj.gz.gov.cn/zfcj/fyxx/fdcxmxx/
+ʵ�ʽӿڣ�ҳ�沶�񣩣�/ysqgk/Api/WebApi/fdcxmxxlb.ashx
 """
 import json, os, time, sys, re
 from datetime import datetime, timedelta
@@ -12,23 +12,23 @@ import requests
 BASE_URL = "https://zfcj.gz.gov.cn/ysqgk/Api/WebApi/fdcxmxxlb.ashx"
 ARCHIVE = "archive.json"
 
-# 配置：用户名�? -> 官方关键�?/过滤条件
+# ���ã��û����� -> �ٷ��ؼ���/��������
 PROJECTS = {
-    "珑曜上城": {
-        "keywords": ["珑曜花园"],
+    "�����ϳ�": {
+        "keywords": ["���׻�԰"],
     },
-    "星汇锦城": {
-        "keywords": ["明颂花园", "盛颂花园"],
+    "�ǻ����": {
+        "keywords": ["���̻�԰", "ʢ�̻�԰"],
     },
-    "繁花�?": {
-        "keywords": ["繁花�?"],
+    "������": {
+        "keywords": ["����Ժ"],
     },
-    "檐屿�?": {
-        "keywords": ["檐屿花园"],
+    "�����": {
+        "keywords": ["���컨԰"],
     },
-    "亚运城环宇熙�?": {
-        # 官方 API 中未找到“熙�?/环宇熙和”备案名；以最新在售的亚运城B地块代理
-        "keywords": ["亚运�?"],
+    "���˳ǻ�������": {
+        # �ٷ� API ��δ�ҵ�������/�������͡������������������۵����˳�B�ؿ����
+        "keywords": ["���˳�"],
         "filter": lambda r: r.get("presell") == "20260088" and "B-6~B-9" in r.get("projectName", "")
     }
 }
@@ -54,7 +54,7 @@ def fetch_page(project_name, page=1, page_size=50):
     return r.json()
 
 def fetch_all(keyword):
-    """抓取关键词下所有页，返回原始记录列表�?"""
+    """ץȡ�ؼ���������ҳ������ԭʼ��¼�б���"""
     records = []
     page = 1
     total_page = 1
@@ -67,8 +67,7 @@ def fetch_all(keyword):
     return records
 
 def clean_building_name(name):
-    """清理官方名称，保留关键信息�?"""
-    # 去掉前后空白，保留括号内自编信息
+    """�����ٷ����ƣ������ؼ���Ϣ��"""
     return re.sub(r"\s+", " ", name).strip()
 
 def build_project_snapshot(alias, cfg):
@@ -78,7 +77,7 @@ def build_project_snapshot(alias, cfg):
     f = cfg.get("filter")
     if f:
         records = [r for r in records if f(r)]
-    # 去重：按 projectId
+    # ȥ�أ��� projectId
     seen = set()
     uniq = []
     for r in records:
@@ -87,7 +86,7 @@ def build_project_snapshot(alias, cfg):
             continue
         seen.add(pid)
         uniq.append(r)
-    # 排序：按预售证号
+    # ���򣺰�Ԥ��֤��
     uniq.sort(key=lambda x: x.get("presell", "") or "")
 
     buildings = []
@@ -124,7 +123,7 @@ def run(target_date=None):
     if target_date is None:
         # ������ʱ�䣨UTC+8��ȡ��ǰ���ڣ�ƥ��ÿ�� 09:00 ��ʱ����
         target_date = (datetime.utcnow() + timedelta(hours=8)).strftime("%Y-%m-%d")
-    # 如果超过今天则取今天；阳光家缘数据为当日累计，建议每天上午抓�?
+
     out = {}
     for alias, cfg in PROJECTS.items():
         print(f"[scraper] fetching {alias} ...")
@@ -134,7 +133,7 @@ def run(target_date=None):
             print(f"[scraper] ERROR {alias}: {e}")
             out[alias] = {"buildings": [], "summary": {"total":0,"signed":0,"remaining":0,"rate":0,"count":0}, "error": str(e)}
 
-    # 读取旧归�?
+    # ��ȡ�ɹ鵵
     archive = {"meta": {}, "records": {}}
     if os.path.exists(ARCHIVE):
         with open(ARCHIVE, "r", encoding="utf-8") as f:
@@ -144,7 +143,7 @@ def run(target_date=None):
     archive["meta"]["fetched_date"] = target_date
     archive["records"][target_date] = out
 
-    # 按日期排序，保持 records 字典
+    # ���������򣬱��� records �ֵ�
     with open(ARCHIVE, "w", encoding="utf-8") as f:
         json.dump(archive, f, ensure_ascii=False, indent=2)
     print(f"[scraper] archived {target_date} -> {ARCHIVE}")
