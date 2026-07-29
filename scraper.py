@@ -10,6 +10,9 @@ from urllib.parse import urlencode
 import requests
 
 BASE_URL = "https://zfcj.gz.gov.cn/ysqgk/Api/WebApi/fdcxmxxlb.ashx"
+DETAIL_URL = "https://zfcj.gz.gov.cn/ysqgk/Api/WebApi/fdcxmjbxx.ashx"
+BUILDING_URL = "https://zfcj.gz.gov.cn/ysqgk/Api/WebApi/xmldxx.ashx"
+SALES_URL = "https://zfcj.gz.gov.cn/ysqgk/Api/WebApi/xmxkbxx.ashx"
 ARCHIVE = "archive.json"
 
 PROJECTS = {
@@ -29,6 +32,27 @@ HEADERS = {
     "Accept": "application/json, text/javascript, */*",
 }
 
+HEADERS_DETAIL = {
+    "User-Agent": HEADERS["User-Agent"],
+    "Referer": "https://zfcj.gz.gov.cn/zfcj/fyxx/projectdetail/index.html",
+    "Accept": "application/json, text/javascript, */*",
+}
+
+
+def _get(url, headers=None, retries=3):
+    headers = headers or HEADERS
+    for attempt in range(retries):
+        try:
+            r = requests.get(url, headers=headers, timeout=30)
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:
+            if attempt == retries - 1:
+                raise
+            print(f"[scraper] retry {attempt+1}/{retries} for {url[:120]}: {e}")
+            time.sleep(2 * (attempt + 1))
+
+
 def fetch_page(project_name, page=1, page_size=50, retries=3):
     params = {
         "sProjectName": project_name,
@@ -38,17 +62,8 @@ def fetch_page(project_name, page=1, page_size=50, retries=3):
         "page": page,
         "pageSize": page_size,
     }
-    url = f"{BASE_URL}?{urlencode(params)}"
-    for attempt in range(retries):
-        try:
-            r = requests.get(url, headers=HEADERS, timeout=30)
-            r.raise_for_status()
-            return r.json()
-        except Exception as e:
-            if attempt == retries - 1:
-                raise
-            print(f"[scraper] retry {attempt+1}/{retries} for {project_name} page {page}: {e}")
-            time.sleep(2 * (attempt + 1))
+    return _get(f"{BASE_URL}?{urlencode(params)}", HEADERS, retries)
+
 
 def fetch_all(keyword):
     records = []
@@ -62,8 +77,42 @@ def fetch_all(keyword):
         time.sleep(0.3)
     return records
 
+
+def fetch_building_list(project_id, presell_no):
+    """根据 projectId + 预售证号获取楼栋列表（buildingId, buildName）。"""
+    params = {"sProjectId": project_id, "sPreSellNo": presell_no}
+    data = _get(f"{BUILDING_URL}?{urlencode(params)}", HEADERS_DETAIL)
+    return data.get("data", [])
+
+
+def fetch_sales_control(building_id):
+    """根据 buildingId 获取销控表楼层/房号数据。"""
+    params = {"buildingId": building_id}
+    data = _get(f"{SALES_URL}?{urlencode(params)}", HEADERS_DETAIL)
+    return data.get("data", [])
+
+
+def fetch_project_detail(project_id):
+    """获取楼盘基本信息和预售面积统计。"""
+    params = {"sProjectId": project_id}
+    data = _get(f"{DETAIL_URL}?{urlencode(params)}", HEADERS_DETAIL)
+    return data.get("data", {})
+
+
 def clean_building_name(name):
     return re.sub(r"\s+", " ", name).strip()
+
+
+def _extract_floor(build_name):
+    """从 buildName 提取简洁栋号，如 '7栋'、'8栋'。"""
+    m = re.search(r'(\d+)栋', build_name)
+    if m:
+        return f"{m.group(1)}栋"
+    m = re.search(r'(自编[号]?)([\dA-Za-z-]+)', build_name)
+    if m:
+        return f"自编号{m.group(2)}"
+    return build_name
+
 
 def build_project_snapshot(alias, cfg):
     records = []
@@ -84,19 +133,46 @@ def build_project_snapshot(alias, cfg):
 
     buildings = []
     for r in uniq:
+        project_id = r.get("projectId", "")
+        presell = r.get("presell", "")
         sold = int(r.get("houseSoldNum", 0) or 0)
         unsale = int(r.get("houseUnsaleNum", 0) or 0)
         total = sold + unsale
-        buildings.append({
+
+        bld_info = {
             "name": clean_building_name(r.get("projectName", "")),
-            "presell": r.get("presell", ""),
+            "presell": presell,
             "developer": r.get("developer", ""),
             "address": r.get("projectAddress", ""),
             "total": total,
             "signed": sold,
             "remaining": unsale,
             "rate": round(sold / total, 6) if total > 0 else 0,
-        })
+        }
+
+        # 抓取销控表楼层/房号数据
+        detail = {"buildings": [], "units": {}}
+        if project_id and presell:
+            try:
+                detail["buildings"] = fetch_building_list(project_id, presell)
+                for sub in detail["buildings"]:
+                    bid = sub.get("buildingId")
+                    if not bid:
+                        continue
+                    floors = fetch_sales_control(bid)
+                    # 从 buildName 提取简洁栋号
+                    detail["units"][bid] = {
+                        "name": _extract_floor(sub.get("buildName", "")),
+                        "fullName": sub.get("buildName", ""),
+                        "floors": floors,
+                    }
+                    time.sleep(0.3)
+            except Exception as e:
+                print(f"[scraper] detail fetch failed for {alias}/{bld_info['name']}: {e}")
+                detail["error"] = str(e)
+        bld_info["detail"] = detail
+        buildings.append(bld_info)
+
     total_all = sum(b["total"] for b in buildings)
     signed_all = sum(b["signed"] for b in buildings)
     remaining_all = sum(b["remaining"] for b in buildings)
@@ -108,6 +184,7 @@ def build_project_snapshot(alias, cfg):
         "count": len(buildings),
     }
     return {"buildings": buildings, "summary": summary}
+
 
 def run(target_date=None):
     if target_date is None:
@@ -136,6 +213,7 @@ def run(target_date=None):
         json.dump(archive, f, ensure_ascii=False, indent=2)
     print(f"[scraper] archived {target_date} -> {ARCHIVE}")
     return archive
+
 
 if __name__ == "__main__":
     date = sys.argv[1] if len(sys.argv) > 1 else None
