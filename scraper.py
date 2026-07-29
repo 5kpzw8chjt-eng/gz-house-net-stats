@@ -14,7 +14,7 @@ ARCHIVE = "archive.json"
 
 PROJECTS = {
     "珑曜上城": {"keywords": ["珑曜花园"]},
-    "星汇锦城": {"keywords": ["明颂花园", "盛颂花园"]},
+    "星汇锦城": {"keywords": ["盛颂花园"]},
     "繁花里": {"keywords": ["繁花院"]},
     "檐屿城": {"keywords": ["檐屿花园"]},
     "亚运城环宇熙和": {
