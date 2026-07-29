@@ -42,65 +42,90 @@ def _prev_date(date, dates):
     return dates[idx-1] if idx > 0 else None
 
 def _week_monday(date, dates):
-    """返回本周一（自然周起点）在存档中的日期。
-    若本周一没有数据，回退到本周第一个有数据的日期。
-    若本周之前没有数据，返回 None（此时周新增=日新增，因为第一天没有周基准）。"""
+    """返回本周一（自然周起点：周一）的日期字符串。
+    自然周定义：周一到周日为一个完整周期。
+    若本周一没有存档数据，回退到本周第一个有数据的日期。"""
     d = datetime.strptime(date, "%Y-%m-%d")
     mon = d - timedelta(days=d.weekday())  # 本周一
     mon_str = mon.strftime("%Y-%m-%d")
-    # 本周一及之后的所有存档日期
     candidates = [dd for dd in dates if mon_str <= dd <= date]
     if candidates:
-        return candidates[0]  # 本周最早有数据的日期（通常就是周一或最近的一天）
-    # 本周无数据（理论上不会发生，但做保护）
+        return candidates[0]
     return None
 
 def _month_first(date, dates):
-    """返回本月1日（自然月起点）在存档中的日期。
-    若本月1日没有数据，回退到本月第一个有数据的日期。
-    若本月之前没有数据，返回 None。"""
+    """返回本月1日（自然月起点）的日期字符串。
+    自然月定义：每月第一天到最后一天为一个完整周期。
+    若本月1日没有存档数据（数据起始日晚于1日），回退到本月第一个有数据的日期。"""
     d = datetime.strptime(date, "%Y-%m-%d")
     first = d.replace(day=1)
     first_str = first.strftime("%Y-%m-%d")
-    # 本月1日及之后的所有存档日期
     candidates = [dd for dd in dates if first_str <= dd <= date]
     if candidates:
-        return candidates[0]  # 本月最早有数据的日期
+        return candidates[0]
     return None
 
 def _attach_compare(item, date, prev, wstart, mstart, records, proj, is_summary=False):
-    """日新增=当天-prev，周新增=当天-本周起点，月新增=当天-本月起点。
-    对于第一天（无prev/wstart/mstart），日新增=当天signed（初始值），周新增=日新增，月新增=日新增。"""
+    """计算日新增/周新增/月新增及环比百分比。
+    日新增 = 当天signed - 前一天signed（若前一天无数据则显示 —）
+    周新增 = 当天signed - 本周一signed，即本周自然周累计新增
+             若当天就是周一，周新增 = 日新增（当天的增量即本周累计）
+    月新增 = 当天signed - 本月1日signed，即本月自然月累计新增
+             若当天就是1日，月新增 = 日新增"""
     out = dict(item)
     curr = item.get("signed", 0) or 0
 
-    # 日新增：当天 vs 前一天
+    # --- 日新增：当天 vs 前一天 ---
     if prev and prev != date and prev in records and proj in records[prev]:
         ref_val = _get_ref_signed(prev, records, proj, item, is_summary)
-        out["day_delta"] = curr - ref_val if ref_val is not None else None
-        out["day_pct"] = round((curr - ref_val) / ref_val, 6) if ref_val and ref_val > 0 else None
+        if ref_val is not None:
+            out["day_delta"] = curr - ref_val
+            out["day_pct"] = round((curr - ref_val) / ref_val, 6) if ref_val > 0 else (0.0 if curr == ref_val else None)
+        else:
+            out["day_delta"] = None
+            out["day_pct"] = None
     else:
-        # 第一天（无前一天数据）：日新增无意义，显示 —
+        # 存档第一天：日新增无意义
         out["day_delta"] = None
         out["day_pct"] = None
 
-    # 周新增：当天 vs 本周起点（周一到今天累计）
-    if wstart and wstart != date and wstart in records and proj in records[wstart]:
-        ref_val = _get_ref_signed(wstart, records, proj, item, is_summary)
-        out["week_delta"] = curr - ref_val if ref_val is not None else None
-        out["week_pct"] = round((curr - ref_val) / ref_val, 6) if ref_val and ref_val > 0 else None
+    day_delta = out.get("day_delta")  # 稍后用于周/月第一天
+
+    # --- 周新增：当天 vs 本周一（自然周累计） ---
+    if wstart and wstart in records and proj in records[wstart]:
+        if wstart != date:
+            # 非周一：当天 signed - 本周一 signed
+            ref_val = _get_ref_signed(wstart, records, proj, item, is_summary)
+            if ref_val is not None:
+                out["week_delta"] = curr - ref_val
+                out["week_pct"] = round((curr - ref_val) / ref_val, 6) if ref_val > 0 else (0.0 if curr == ref_val else None)
+            else:
+                out["week_delta"] = None
+                out["week_pct"] = None
+        else:
+            # 当天就是周一：周新增 = 日新增（本周目前只有今天的数据）
+            out["week_delta"] = day_delta
+            out["week_pct"] = out.get("day_pct")
     else:
-        # 本周第一天或无上周数据：周新增也无意义
         out["week_delta"] = None
         out["week_pct"] = None
 
-    # 月新增：当天 vs 本月起点（1日到今天累计）
-    if mstart and mstart != date and mstart in records and proj in records[mstart]:
-        ref_val = _get_ref_signed(mstart, records, proj, item, is_summary)
-        out["month_delta"] = curr - ref_val if ref_val is not None else None
-        out["month_pct"] = round((curr - ref_val) / ref_val, 6) if ref_val and ref_val > 0 else None
+    # --- 月新增：当天 vs 本月1日（自然月累计） ---
+    if mstart and mstart in records and proj in records[mstart]:
+        if mstart != date:
+            # 非1日：当天 signed - 本月1日 signed
+            ref_val = _get_ref_signed(mstart, records, proj, item, is_summary)
+            if ref_val is not None:
+                out["month_delta"] = curr - ref_val
+                out["month_pct"] = round((curr - ref_val) / ref_val, 6) if ref_val > 0 else (0.0 if curr == ref_val else None)
+            else:
+                out["month_delta"] = None
+                out["month_pct"] = None
+        else:
+            # 当天就是本月1日：月新增 = 日新增（本月目前只有今天的数据）
+            out["month_delta"] = day_delta
+            out["month_pct"] = out.get("day_pct")
     else:
-        # 本月第一天或无上月数据：月新增也无意义
         out["month_delta"] = None
         out["month_pct"] = None
 

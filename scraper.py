@@ -29,7 +29,7 @@ HEADERS = {
     "Accept": "application/json, text/javascript, */*",
 }
 
-def fetch_page(project_name, page=1, page_size=50):
+def fetch_page(project_name, page=1, page_size=50, retries=3):
     params = {
         "sProjectName": project_name,
         "sProjectAddress": "",
@@ -39,9 +39,16 @@ def fetch_page(project_name, page=1, page_size=50):
         "pageSize": page_size,
     }
     url = f"{BASE_URL}?{urlencode(params)}"
-    r = requests.get(url, headers=HEADERS, timeout=30)
-    r.raise_for_status()
-    return r.json()
+    for attempt in range(retries):
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=30)
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:
+            if attempt == retries - 1:
+                raise
+            print(f"[scraper] retry {attempt+1}/{retries} for {project_name} page {page}: {e}")
+            time.sleep(2 * (attempt + 1))
 
 def fetch_all(keyword):
     records = []
