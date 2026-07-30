@@ -8,11 +8,9 @@ from urllib.parse import quote
 ARCHIVE = "archive.json"
 OUT = "广州新房网签数据.html"
 
-
 def load_archive():
     with open(ARCHIVE, "r", encoding="utf-8") as f:
         return json.load(f)
-
 
 def compute_comparisons(archive):
     dates = sorted(archive.get("records", {}).keys())
@@ -24,35 +22,41 @@ def compute_comparisons(archive):
         out["records"][date] = {}
         for proj in projects:
             snap = records[date].get(proj, {"buildings": [], "summary": {}})
+            # reference dates
             prev = _prev_date(date, dates)
             wstart = _week_monday(date, dates)
             mstart = _month_first(date, dates)
+            # building level
             bld_out = []
             for b in snap.get("buildings", []):
                 bld_out.append(_attach_compare(b, date, prev, wstart, mstart, records, proj))
+            # summary level
             summary = snap.get("summary", {}).copy()
             summary = _attach_compare(summary, date, prev, wstart, mstart, records, proj, is_summary=True)
             summary["count"] = len(bld_out)
             out["records"][date][proj] = {"buildings": bld_out, "summary": summary}
     return out
 
-
 def _prev_date(date, dates):
     idx = dates.index(date)
     return dates[idx-1] if idx > 0 else None
 
-
 def _week_monday(date, dates):
+    """返回本周一（自然周起点：周一）的日期字符串。
+    自然周定义：周一到周日为一个完整周期。
+    若本周一没有存档数据，回退到本周第一个有数据的日期。"""
     d = datetime.strptime(date, "%Y-%m-%d")
-    mon = d - timedelta(days=d.weekday())
+    mon = d - timedelta(days=d.weekday())  # 本周一
     mon_str = mon.strftime("%Y-%m-%d")
     candidates = [dd for dd in dates if mon_str <= dd <= date]
     if candidates:
         return candidates[0]
     return None
 
-
 def _month_first(date, dates):
+    """返回本月1日（自然月起点）的日期字符串。
+    自然月定义：每月第一天到最后一天为一个完整周期。
+    若本月1日没有存档数据（数据起始日晚于1日），回退到本月第一个有数据的日期。"""
     d = datetime.strptime(date, "%Y-%m-%d")
     first = d.replace(day=1)
     first_str = first.strftime("%Y-%m-%d")
@@ -61,10 +65,17 @@ def _month_first(date, dates):
         return candidates[0]
     return None
 
-
 def _attach_compare(item, date, prev, wstart, mstart, records, proj, is_summary=False):
+    """计算日新增/周新增/月新增及环比百分比。
+    日新增 = 当天signed - 前一天signed（若前一天无数据则显示 —）
+    周新增 = 当天signed - 本周一signed，即本周自然周累计新增
+             若当天就是周一，周新增 = 日新增（当天的增量即本周累计）
+    月新增 = 当天signed - 本月1日signed，即本月自然月累计新增
+             若当天就是1日，月新增 = 日新增"""
     out = dict(item)
     curr = item.get("signed", 0) or 0
+
+    # --- 日新增：当天 vs 前一天 ---
     if prev and prev != date and prev in records and proj in records[prev]:
         ref_val = _get_ref_signed(prev, records, proj, item, is_summary)
         if ref_val is not None:
@@ -74,11 +85,16 @@ def _attach_compare(item, date, prev, wstart, mstart, records, proj, is_summary=
             out["day_delta"] = None
             out["day_pct"] = None
     else:
+        # 存档第一天：日新增无意义
         out["day_delta"] = None
         out["day_pct"] = None
-    day_delta = out.get("day_delta")
+
+    day_delta = out.get("day_delta")  # 稍后用于周/月第一天
+
+    # --- 周新增：当天 vs 本周一（自然周累计） ---
     if wstart and wstart in records and proj in records[wstart]:
         if wstart != date:
+            # 非周一：当天 signed - 本周一 signed
             ref_val = _get_ref_signed(wstart, records, proj, item, is_summary)
             if ref_val is not None:
                 out["week_delta"] = curr - ref_val
@@ -87,13 +103,17 @@ def _attach_compare(item, date, prev, wstart, mstart, records, proj, is_summary=
                 out["week_delta"] = None
                 out["week_pct"] = None
         else:
+            # 当天就是周一：周新增 = 日新增（本周目前只有今天的数据）
             out["week_delta"] = day_delta
             out["week_pct"] = out.get("day_pct")
     else:
         out["week_delta"] = None
         out["week_pct"] = None
+
+    # --- 月新增：当天 vs 本月1日（自然月累计） ---
     if mstart and mstart in records and proj in records[mstart]:
         if mstart != date:
+            # 非1日：当天 signed - 本月1日 signed
             ref_val = _get_ref_signed(mstart, records, proj, item, is_summary)
             if ref_val is not None:
                 out["month_delta"] = curr - ref_val
@@ -102,15 +122,17 @@ def _attach_compare(item, date, prev, wstart, mstart, records, proj, is_summary=
                 out["month_delta"] = None
                 out["month_pct"] = None
         else:
+            # 当天就是本月1日：月新增 = 日新增（本月目前只有今天的数据）
             out["month_delta"] = day_delta
             out["month_pct"] = out.get("day_pct")
     else:
         out["month_delta"] = None
         out["month_pct"] = None
+
     return out
 
-
 def _get_ref_signed(ref_date, records, proj, item, is_summary):
+    """从参考日期获取对应楼盘/楼栋的 signed 值。"""
     ref_rec = records[ref_date][proj]
     if is_summary:
         ref = ref_rec.get("summary", {})
@@ -120,12 +142,29 @@ def _get_ref_signed(ref_date, records, proj, item, is_summary):
         return None
     return ref.get("signed", 0) or 0
 
+def pct_html(v):
+    if v is None:
+        return "<span class=\"na\">—</span>"
+    cls = "up" if v > 0 else ("down" if v < 0 else "zero")
+    return f'<span class="{cls}">{v*100:+.2f}%</span>'
+
+def num_html(v):
+    if v is None:
+        return "<span class=\"na\">—</span>"
+    sign = "+" if v > 0 else ""
+    return f'<span class="num">{sign}{v:,}</span>'
+
+def rate_html(v):
+    if v is None:
+        return "<span class=\"na\">—</span>"
+    return f'<span class="rate">{v*100:.2f}%</span>'
 
 def build_html(data):
     dates = data["dates"]
     latest = dates[-1] if dates else ""
     data_json = json.dumps(data, ensure_ascii=False, indent=2)
-    data_json = data_json.replace("</", "<\/")
+    data_json = data_json.replace("</", "<\\/")  # avoid </script> injection
+    # mapping notes
     mapping_notes = {
         "珑曜上城": "官方备案名：珑曜花园",
         "星汇锦城": "官方备案名：盛颂花园（越秀·大学·星汇锦城）",
@@ -133,6 +172,7 @@ def build_html(data):
         "檐屿城": "官方备案名：檐屿花园",
         "亚运城环宇熙和": "阳光家缘未以“熙和/环宇熙和”备案；本表以最新在售官方组团“亚运城B地块B-6~B-9幢住宅（预售证20260088）”代理"
     }
+
     project_cards = []
     for proj in data["projects"]:
         s = data["records"][latest][proj]["summary"] if latest else {}
@@ -156,10 +196,10 @@ def build_html(data):
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>广州新房网签数据</title>
 <style>
-:root{{--bg:#f5f7fa;--card:#fff;--primary:#1f4e78;--accent:#2e75b6;--text:#333;--muted:#666;--border:#e0e4e8;--up:#d32f2f;--down:#388e3c;--zero:#999;--warn:#fff3cd;--warn-t:#856404;--shadow:0 2px 8px rgba(0,0,0,.06);}}
+:root{{--bg:#f5f7fa;--card:#fff;--primary:#1f4e78;--accent:#2e75b6;--text:#333;--muted:#666;--border:#e0e4e8;--up:#d32f2f;--down:#388e3c;--zero:#999;--warn:#fff3cd;--warn-t:#856404;}}
 *{{box-sizing:border-box}}
 body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);margin:0;padding:20px;line-height:1.5}}
-header{{max-width:1300px;margin:0 auto 20px;background:var(--card);padding:22px 28px;border-radius:10px;box-shadow:var(--shadow)}}
+header{{max-width:1300px;margin:0 auto 20px;background:var(--card);padding:22px 28px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06)}}
 header h1{{margin:0 0 8px;font-size:24px;color:var(--primary)}}
 header p{{margin:6px 0;color:var(--muted);font-size:14px}}
 header a{{color:var(--accent);text-decoration:none}}
@@ -167,14 +207,14 @@ header a{{color:var(--accent);text-decoration:none}}
 .controls label{{font-weight:600;color:var(--muted)}}
 .controls select{{font-size:16px;padding:8px 12px;border-radius:6px;border:1px solid var(--border);background:#fff}}
 .cards{{max-width:1300px;margin:0 auto 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}}
-.card{{background:var(--card);padding:16px 18px;border-radius:10px;box-shadow:var(--shadow);cursor:pointer;transition:transform .15s,border-color .15s;border:2px solid transparent}}
+.card{{background:var(--card);padding:16px 18px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06);cursor:pointer;transition:transform .15s,border-color .15s;border:2px solid transparent}}
 .card:hover{{transform:translateY(-2px);border-color:var(--accent)}}
 .card.active{{border-color:var(--primary)}}
 .card-title{{font-weight:700;font-size:16px;color:var(--primary);margin-bottom:10px}}
 .card-grid{{display:grid;grid-template-columns:1fr 1fr;gap:10px}}
 .card-grid .lbl{{font-size:12px;color:var(--muted)}}
 .card-grid .val{{font-size:18px;font-weight:700;color:var(--text)}}
-.section{{max-width:1300px;margin:0 auto 28px;background:var(--card);border-radius:10px;box-shadow:var(--shadow);overflow:hidden}}
+.section{{max-width:1300px;margin:0 auto 28px;background:var(--card);border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06);overflow:hidden}}
 .section-header{{padding:16px 20px;background:linear-gradient(90deg,var(--primary),var(--accent));color:#fff;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}}
 .section-header h2{{margin:0;font-size:18px}}
 .section-header .note{{font-size:12px;opacity:.9}}
@@ -194,38 +234,8 @@ span.rate{{color:var(--primary);font-weight:600}}
 .warn{{background:var(--warn);color:var(--warn-t);padding:12px 16px;border-radius:8px;margin:0 auto 20px;max-width:1300px;font-size:14px}}
 footer{{max-width:1300px;margin:30px auto;color:var(--muted);font-size:13px}}
 footer p{{margin:6px 0}}
-.bld-link{{color:var(--accent);cursor:pointer;text-decoration:underline}}
-.bld-link:hover{{color:var(--primary)}}
-.modal-overlay{{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px}}
-.modal-overlay.open{{display:flex}}
-.modal{{background:var(--card);border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.2);width:min(1100px,100%);max-height:90vh;display:flex;flex-direction:column;overflow:hidden}}
-.modal-header{{padding:16px 20px;background:var(--primary);color:#fff;display:flex;justify-content:space-between;align-items:center}}
-.modal-header h3{{margin:0;font-size:18px}}
-.modal-header .close{{cursor:pointer;font-size:22px;line-height:1}}
-.modal-subtabs{{display:flex;gap:8px;padding:12px 20px 0;border-bottom:1px solid var(--border);flex-wrap:wrap}}
-.modal-subtabs .subtab{{padding:6px 14px;border-radius:6px 6px 0 0;cursor:pointer;border:1px solid transparent;border-bottom:none;background:#f0f4f8;color:var(--muted)}}
-.modal-subtabs .subtab.active{{background:var(--card);color:var(--primary);border-color:var(--border);font-weight:600}}
-.modal-body{{padding:16px 20px;overflow:auto;flex:1}}
-.sales-legend{{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;font-size:13px;color:var(--muted)}}
-.legend-item{{display:flex;align-items:center;gap:5px}}
-.legend-color{{width:16px;height:16px;border-radius:4px;border:1px solid #ccc}}
-.sales-table{{border-collapse:collapse;width:auto;min-width:100%;font-size:13px}}
-.sales-table th,.sales-table td{{border:1px solid var(--border);padding:4px 6px;text-align:center;white-space:nowrap}}
-.sales-table th{{background:#f8fafc;position:sticky;top:0;z-index:2}}
-.sales-table td.floor-label{{background:#f0f4f8;font-weight:600;color:var(--primary);position:sticky;left:0;z-index:1}}
-.room-cell{{min-width:64px;height:46px;vertical-align:middle;cursor:default;border-radius:3px}}
-.room-cell .unit{{font-weight:700;font-size:12px}}
-.room-cell .type{{font-size:10px;color:rgba(0,0,0,.65);margin-top:1px}}
-.status-3{{background:#4caf50;color:#fff}}
-.status-4{{background:#d32f2f;color:#fff}}
-.status-5{{background:#ff9800;color:#fff}}
-.status-1{{background:#9e9e9e;color:#fff}}
-.status-2{{background:#42a5f5;color:#fff}}
-.status-0{{background:#e0e0e0;color:#666}}
-.room-tip{{position:fixed;background:rgba(0,0,0,.85);color:#fff;padding:8px 10px;border-radius:6px;font-size:12px;pointer-events:none;z-index:2000;display:none;max-width:220px;line-height:1.5}}
-.no-detail{{color:var(--muted);padding:30px;text-align:center}}
-@media(max-width:900px){{body{{padding:10px}} .cards{{grid-template-columns:1fr 1fr}} .section{{overflow-x:auto}} table{{min-width:760px}} .modal{{width:100%;max-height:95vh}}}}
-@media(max-width:600px){{.cards{{grid-template-columns:1fr}} .modal-subtabs{{gap:4px}}}}
+@media(max-width:900px){{body{{padding:10px}} .cards{{grid-template-columns:1fr 1fr}} .section{{overflow-x:auto}} table{{min-width:760px}}}}
+@media(max-width:600px){{.cards{{grid-template-columns:1fr}}}}
 </style>
 </head>
 <body>
@@ -238,11 +248,11 @@ footer p{{margin:6px 0}}
 <div class="controls">
   <label for="dateSel">选择日期：</label>
   <select id="dateSel"></select>
-  <span style="color:var(--muted);font-size:13px">默认显示最新日期；日/周/月环比需至少 2 天数据后自动出现；点击楼栋名查看销控表</span>
+  <span style="color:var(--muted);font-size:13px">默认显示最新日期；日/周/月环比需至少 2 天数据后自动出现</span>
 </div>
 
 <div class="warn">
-  <b>数据说明：</b>“已网签数”对应阳光家缘“住宅已售套数”；“剩余未网签”对应“住宅未售套数”；“预售总数”=已售+未售。点击楼栋名称可查看官方销控表（楼层×房号）。由于官方 API 不返回“栋号”拆分，楼栋名即官方备案记录中的项目名称。
+  <b>数据说明：</b>“已网签数”对应阳光家缘“住宅已售套数”；“剩余未网签”对应“住宅未售套数”；“预售总数”=已售+未售。由于官方 API 不返回“栋号”拆分，楼栋名即官方备案记录中的项目名称。
 </div>
 
 <div class="cards" id="cards">
@@ -250,21 +260,6 @@ footer p{{margin:6px 0}}
 </div>
 
 <div id="tables"></div>
-
-<div class="modal-overlay" id="modalOverlay">
-  <div class="modal">
-    <div class="modal-header">
-      <h3 id="modalTitle">楼栋销控表</h3>
-      <span class="close" onclick="closeModal()">&times;</span>
-    </div>
-    <div class="modal-subtabs" id="modalSubtabs"></div>
-    <div class="modal-body" id="modalBody">
-      <div class="sales-legend" id="salesLegend"></div>
-      <div id="salesTableWrap"></div>
-    </div>
-  </div>
-</div>
-<div class="room-tip" id="roomTip"></div>
 
 <footer>
   <p><b>楼盘名称映射：</b>楼栋名严格采用阳光家缘官方备案名称。珑曜上城→珑曜花园；星汇锦城→盛颂花园；繁花里→繁花院；檐屿城→檐屿花园；亚运城环宇熙和→官方暂无“熙和/环宇熙和”备案记录，暂以最新在售官方组团“亚运城B地块B-6~B-9幢住宅”代理。</p>
@@ -278,20 +273,6 @@ const curDateSpan = document.getElementById('curDate');
 const lastUpdate = document.getElementById('lastUpdate');
 const tables = document.getElementById('tables');
 const cards = document.getElementById('cards');
-const modalOverlay = document.getElementById('modalOverlay');
-const modalTitle = document.getElementById('modalTitle');
-const modalSubtabs = document.getElementById('modalSubtabs');
-const salesLegend = document.getElementById('salesLegend');
-const salesTableWrap = document.getElementById('salesTableWrap');
-const roomTip = document.getElementById('roomTip');
-
-const STATUS_MAP = {{
-  3: {{label:'可售', cls:'status-3'}},
-  4: {{label:'已售', cls:'status-4'}},
-  5: {{label:'限制销售', cls:'status-5'}},
-  1: {{label:'未纳入/其他', cls:'status-1'}},
-  2: {{label:'抵押/查封', cls:'status-2'}}
-}};
 
 lastUpdate.textContent = (ARCHIVE.meta.updated || '').replace('T',' ').substring(0,19);
 ARCHIVE.dates.slice().reverse().forEach(d => {{ const opt = document.createElement('option'); opt.value = d; opt.textContent = d; dateSel.appendChild(opt); }});
@@ -314,7 +295,7 @@ function render(){{
     const note = {json.dumps(mapping_notes, ensure_ascii=False)};
     let rows = p.buildings.map((b, i) => `
       <tr>
-        <td class="name"><span class="bld-link" onclick="openSalesControl('${{proj}}','${{b.name.replace(/'/g,"\\'")}}')">${{b.name}}</span></td>
+        <td class="name">${{b.name}}</td>
         <td>${{b.presell}}</td>
         <td class="num">${{fmtNum(b.total)}}</td>
         <td class="num">${{fmtNum(b.signed)}}</td>
@@ -360,7 +341,7 @@ function render(){{
       <table>
         <thead>
           <tr>
-            <th>楼栋（官方备案名，点击查看销控表）</th><th>预售证号</th><th>预售总数</th><th>已网签数</th><th>剩余未网签</th><th>去化率</th>
+            <th>楼栋（官方备案名）</th><th>预售证号</th><th>预售总数</th><th>已网签数</th><th>剩余未网签</th><th>去化率</th>
             <th>日新增</th><th>日环比</th><th>本周累计新增</th><th>周环比</th><th>本月累计新增</th><th>月环比</th>
           </tr>
         </thead>
@@ -371,148 +352,14 @@ function render(){{
   }});
 }}
 
-let currentSubUnits = [];
-let currentSubIndex = 0;
-
-function openSalesControl(proj, bldName){{
-  const date = dateSel.value;
-  const p = (ARCHIVE.records[date] || {{}})[proj];
-  if (!p) return;
-  const b = p.buildings.find(x => x.name === bldName);
-  if (!b) return;
-  const detail = b.detail || {{}};
-  const units = detail.units || {{}};
-  const bids = Object.keys(units);
-  if (bids.length === 0){{
-    modalTitle.textContent = `${{proj}} · ${{bldName}}`;
-    modalSubtabs.innerHTML = '';
-    salesLegend.innerHTML = '';
-    salesTableWrap.innerHTML = '<div class="no-detail">暂无销控表楼层数据（可能官方接口暂未返回）</div>';
-    modalOverlay.classList.add('open');
-    return;
-  }}
-  currentSubUnits = bids.map(bid => ({{bid, ...units[bid]}}));
-  currentSubIndex = 0;
-  modalTitle.textContent = `${{proj}} · ${{bldName}}（预售证 ${{b.presell}}）`;
-  renderSubtabs();
-  renderSalesTable(currentSubUnits[0]);
-  modalOverlay.classList.add('open');
-}}
-
-function renderSubtabs(){{
-  if (currentSubUnits.length <= 1){{
-    modalSubtabs.innerHTML = '';
-    return;
-  }}
-  modalSubtabs.innerHTML = currentSubUnits.map((u, i) => `
-    <div class="subtab ${{i===currentSubIndex?'active':''}}" onclick="switchSubtab(${{i}})">${{u.name}}</div>
-  `).join('');
-}}
-
-window.switchSubtab = function(i){{
-  currentSubIndex = i;
-  renderSubtabs();
-  renderSalesTable(currentSubUnits[i]);
-}}
-
-function renderSalesTable(unit){{
-  const legendItems = [
-    {{cls:'status-3', label:'可售'}},
-    {{cls:'status-4', label:'已售/已签约'}},
-    {{cls:'status-5', label:'限制销售'}},
-    {{cls:'status-1', label:'未纳入/其他'}},
-    {{cls:'status-2', label:'抵押/查封'}},
-    {{cls:'status-0', label:'未知'}}
-  ];
-  salesLegend.innerHTML = legendItems.map(item => `
-    <div class="legend-item"><div class="legend-color ${{item.cls}}"></div><span>${{item.label}}</span></div>
-  `).join('');
-
-  const floors = unit.floors || [];
-  if (floors.length === 0){{
-    salesTableWrap.innerHTML = '<div class="no-detail">该楼栋暂无销控表数据</div>';
-    return;
-  }}
-
-  const sorted = floors.slice().sort((a,b) => Number(b.group) - Number(a.group));
-  const colSet = new Set();
-  sorted.forEach(f => f.groupData.forEach(r => colSet.add(r.unitNum)));
-  // 按完整房号字符串排序（如 2901 < 3001 < 3101 < 3201）
-  const cols = Array.from(colSet).sort();
-
-  let html = '<table class="sales-table"><thead><tr><th class="floor-label">楼层</th>';
-  cols.forEach(c => {{ html += `<th>${{c}}</th>`; }});
-  html += '</tr></thead><tbody>';
-
-  sorted.forEach(f => {{
-    html += `<tr><td class="floor-label">${{f.group}}层</td>`;
-    const map = {{}};
-    f.groupData.forEach(r => {{ map[r.unitNum] = r; }});
-    cols.forEach(c => {{
-      const r = map[c];
-      if (!r){{
-        html += '<td></td>';
-      }} else {{
-        let st;
-        if (r.preSellStatus === 1) st = {{cls:'status-4', label:'已售/已签约'}};
-        else if (r.preSellStatus === 0) st = {{cls:'status-3', label:'可售'}};
-        else st = STATUS_MAP[r.status] || {{cls:'status-0', label:'未知'}};
-        html += `<td class="room-cell ${{st.cls}}" data-info='${{JSON.stringify(r).replace(/'/g,"&#39;")}}'>
-          <div class="unit">${{r.unitNum}}</div>
-          <div class="type">${{r.unitType||r.houseFunction||''}}</div>
-        </td>`;
-      }}
-    }});
-    html += '</tr>';
-  }});
-  html += '</tbody></table>';
-  salesTableWrap.innerHTML = html;
-
-  salesTableWrap.querySelectorAll('.room-cell').forEach(cell => {{
-    cell.addEventListener('mouseenter', e => {{
-      const r = JSON.parse(cell.getAttribute('data-info'));
-      let st;
-      if (r.preSellStatus === 1) st = {{label:'已售/已签约'}};
-      else if (r.preSellStatus === 0) st = {{label:'可售'}};
-      else st = STATUS_MAP[r.status] || {{label:'未知'}};
-      roomTip.innerHTML = `
-        <b>${{r.unitNum}}</b>（${{r.floorNum}}层）<br/>
-        类型：${{r.houseFunction||'—'}} ${{r.unitType||''}}<br/>
-        建筑面积：${{r.totalArea}}㎡<br/>
-        套内面积：${{r.inArea}}㎡<br/>
-        状态：${{st.label}}
-      `;
-      roomTip.style.display = 'block';
-    }});
-    cell.addEventListener('mousemove', e => {{
-      roomTip.style.left = (e.clientX + 12) + 'px';
-      roomTip.style.top = (e.clientY + 12) + 'px';
-    }});
-    cell.addEventListener('mouseleave', () => {{ roomTip.style.display = 'none'; }});
-  }});
-}}
-
-window.closeModal = function(){{
-  modalOverlay.classList.remove('open');
-}}
-
-modalOverlay.addEventListener('click', e => {{
-  if (e.target === modalOverlay) closeModal();
-}});
-document.addEventListener('keydown', e => {{
-  if (e.key === 'Escape') closeModal();
-}});
-
 dateSel.addEventListener('change', render);
 render();
 </script>
 </body>
 </html>'''
-
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"[build_site] generated {OUT} ({len(html)} bytes)")
-
 
 if __name__ == "__main__":
     archive = load_archive()
