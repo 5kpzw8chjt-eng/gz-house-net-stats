@@ -1,8 +1,8 @@
 {
   "meta": {
     "source": "https://zfcj.gz.gov.cn/zfcj/fyxx/fdcxmxx/",
-    "updated": "2026-09-25T06:01:10.215955",
-    "fetched_date": "2026-09-25"
+    "updated": "2026-09-26T06:00:48.653711",
+    "fetched_date": "2026-09-26"
   },
   "records": {
     "2026-07-27": {
@@ -15509,6 +15509,63 @@
       }
     },
     "2026-09-25": {
+      "珑曜上城": {
+        "buildings": [],
+        "summary": {
+          "total": 0,
+          "signed": 0,
+          "remaining": 0,
+          "rate": 0,
+          "count": 0
+        },
+        "error": "550 Server Error:  for url: https://zfcj.gz.gov.cn/ysqgk/Api/WebApi/fdcxmxxlb.ashx?sProjectName=%E7%8F%91%E6%9B%9C%E8%8A%B1%E5%9B%AD&sProjectAddress=&sDeveloper=&sPresellNo=&page=1&pageSize=50"
+      },
+      "星汇锦城": {
+        "buildings": [],
+        "summary": {
+          "total": 0,
+          "signed": 0,
+          "remaining": 0,
+          "rate": 0,
+          "count": 0
+        },
+        "error": "550 Server Error:  for url: https://zfcj.gz.gov.cn/ysqgk/Api/WebApi/fdcxmxxlb.ashx?sProjectName=%E7%9B%9B%E9%A2%82%E8%8A%B1%E5%9B%AD&sProjectAddress=&sDeveloper=&sPresellNo=&page=1&pageSize=50"
+      },
+      "繁花里": {
+        "buildings": [],
+        "summary": {
+          "total": 0,
+          "signed": 0,
+          "remaining": 0,
+          "rate": 0,
+          "count": 0
+        },
+        "error": "550 Server Error:  for url: https://zfcj.gz.gov.cn/ysqgk/Api/WebApi/fdcxmxxlb.ashx?sProjectName=%E7%B9%81%E8%8A%B1%E9%99%A2&sProjectAddress=&sDeveloper=&sPresellNo=&page=1&pageSize=50"
+      },
+      "檐屿城": {
+        "buildings": [],
+        "summary": {
+          "total": 0,
+          "signed": 0,
+          "remaining": 0,
+          "rate": 0,
+          "count": 0
+        },
+        "error": "550 Server Error:  for url: https://zfcj.gz.gov.cn/ysqgk/Api/WebApi/fdcxmxxlb.ashx?sProjectName=%E6%AA%90%E5%B1%BF%E8%8A%B1%E5%9B%AD&sProjectAddress=&sDeveloper=&sPresellNo=&page=1&pageSize=50"
+      },
+      "亚运城环宇熙和": {
+        "buildings": [],
+        "summary": {
+          "total": 0,
+          "signed": 0,
+          "remaining": 0,
+          "rate": 0,
+          "count": 0
+        },
+        "error": "550 Server Error:  for url: https://zfcj.gz.gov.cn/ysqgk/Api/WebApi/fdcxmxxlb.ashx?sProjectName=%E4%BA%9A%E8%BF%90%E5%9F%8E&sProjectAddress=&sDeveloper=&sPresellNo=&page=1&pageSize=50"
+      }
+    },
+    "2026-09-26": {
       "珑曜上城": {
         "buildings": [],
         "summary": {
